@@ -47,6 +47,7 @@ $programs = @(
     @{ Name = "Razer Synapse";      Check = "Razer Synapse"; Special = $false }
     @{ Name = "FXSound";            Check = "FXSound";  Special = $false }
     @{ Name = "LosslessCut";        Check = "LosslessCut"; Special = $false }
+    @{ Name = "FiveM";              Check = "FIVEM";       Special = $true  }
     @{ Name = "NVIDIA Driver 610.47"; Check = "NVIDIA_DRIVER"; Special = $true }
 )
 
@@ -67,10 +68,23 @@ function Check-NvidiaDriver {
     return [bool]($found)
 }
 
+function Check-FiveM {
+    # เช็คจาก registry ก่อน
+    if (Is-Installed "FiveM") { return $true }
+    # fallback เช็คจาก path ที่ FiveM มักติดตั้งอยู่
+    $paths = @(
+        "$env:LOCALAPPDATA\FiveM\FiveM.exe",
+        "$env:LOCALAPPDATA\FiveM\app\FiveM.exe"
+    )
+    foreach ($p in $paths) { if (Test-Path $p) { return $true } }
+    return $false
+}
+
 function Get-InstalledStatus($prog) {
     switch ($prog.Check) {
         "NET48"         { return Check-NET48 }
         "NVIDIA_DRIVER" { return Check-NvidiaDriver }
+        "FIVEM"         { return Check-FiveM }
         default         { return Is-Installed $prog.Check }
     }
 }
@@ -287,6 +301,56 @@ try {
                         }
                         $ok = $true
                     }
+                } catch { Write-Fail "Failed: $_" }
+            }
+
+            # ── FiveM ────────────────────────────────────────
+            "FIVEM" {
+                try {
+                    # ค้นหา GTAV จาก Steam ก่อน — FiveM ต้องการ path ของ GTAV
+                    Write-Step "Locating GTA V (Steam) ..."
+                    $gtavPath = $null
+
+                    # วิธีที่ 1: อ่านจาก Steam libraryfolders.vdf
+                    $steamBase = (Get-ItemProperty "HKLM:\SOFTWARE\WOW6432Node\Valve\Steam" -ErrorAction SilentlyContinue).InstallPath
+                    if (-not $steamBase) {
+                        $steamBase = (Get-ItemProperty "HKLM:\SOFTWARE\Valve\Steam" -ErrorAction SilentlyContinue).InstallPath
+                    }
+                    if ($steamBase) {
+                        $vdf = "$steamBase\steamapps\libraryfolders.vdf"
+                        if (Test-Path $vdf) {
+                            $vdfContent = Get-Content $vdf -Raw
+                            # ดึง path ทุก library จาก vdf
+                            $libPaths = [regex]::Matches($vdfContent, '"path"\s+"([^"]+)"') |
+                                        ForEach-Object { $_.Groups[1].Value -replace '\\', '' }
+                            # เพิ่ม library หลักด้วย
+                            $libPaths = @($steamBase) + $libPaths
+                            foreach ($lib in $libPaths) {
+                                $candidate = "$lib\steamapps\common\Grand Theft Auto V"
+                                if (Test-Path "$candidate\GTA5.exe") {
+                                    $gtavPath = $candidate
+                                    break
+                                }
+                            }
+                        }
+                    }
+
+                    if ($gtavPath) {
+                        Write-OK "Found GTA V at: $gtavPath"
+                    } else {
+                        Write-Fail "GTA V not found in any Steam library — FiveM requires GTA V to be installed first"
+                        # ไม่ติดตั้ง FiveM ถ้าไม่เจอ GTAV
+                        break
+                    }
+
+                    # ดาวน์โหลดและติดตั้ง FiveM
+                    $file = "$tmp\FiveM.exe"
+                    Write-Step "Downloading FiveM ..."
+                    Download-File "https://runtime.fivem.net/client/FiveM.exe" $file
+                    Write-Step "Installing FiveM ..."
+                    Start-Process $file -ArgumentList "/SILENT" -Wait
+                    Write-OK "FiveM installed"
+                    $ok = $true
                 } catch { Write-Fail "Failed: $_" }
             }
 
