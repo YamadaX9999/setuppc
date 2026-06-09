@@ -88,6 +88,11 @@ function Check-FiveM {
         "$env:LOCALAPPDATA\FiveM\app\FiveM.exe"
     )
     foreach ($p in $paths) { if (Test-Path $p) { return $true } }
+    # เช็ค .exe ใน subfolder ทั้งหมด (รองรับทุก build version)
+    if (Test-Path "$env:LOCALAPPDATA\FiveM") {
+        $exe = Get-ChildItem "$env:LOCALAPPDATA\FiveM" -Filter "FiveM.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+        return ($null -ne $exe)
+    }
     return $false
 }
 
@@ -141,10 +146,7 @@ Write-Host ""
 $Host.UI.RawUI.FlushInputBuffer()
 $confirm = ""
 while ($confirm -notmatch "^[YyNn]$") {
-    Write-Host "Proceed with installation? (Y/N): " -NoNewline -ForegroundColor Yellow
-    $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-    $confirm = $key.Character.ToString()
-    Write-Host $confirm
+    $confirm = (Read-Host "Proceed with installation? (Y/N)").Trim()
 }
 if ($confirm -notmatch "^[Yy]$") {
     Write-Host "Cancelled." -ForegroundColor DarkGray
@@ -357,6 +359,10 @@ try {
 
                     if ($gtavPath) {
                         Write-OK "Found GTA V at: $gtavPath"
+                        Write-Host ""
+                        Write-Host "  *** เมื่อ FiveM เปิด dialog ให้เลือกไฟล์ ***" -ForegroundColor Cyan
+                        Write-Host "  *** ให้ไปที่: $gtavPath\GTA5.exe           ***" -ForegroundColor Cyan
+                        Write-Host ""
                     } else {
                         Write-Fail "GTA V not found in any Steam library — FiveM requires GTA V to be installed first"
                         # ไม่ติดตั้ง FiveM ถ้าไม่เจอ GTAV
@@ -367,10 +373,28 @@ try {
                     $file = "$tmp\FiveM.exe"
                     Write-Step "Downloading FiveM ..."
                     Download-File "https://runtime.fivem.net/client/FiveM.exe" $file
-                    Write-Step "Installing FiveM ..."
-                    Start-Process $file -ArgumentList "/SILENT" -Wait
-                    Write-OK "FiveM installed"
-                    $ok = $true
+                    Write-Step "Installing FiveM ... (ทำตามขั้นตอนบนหน้าจอ จากนั้นปิด FiveM เพื่อดำเนินการต่อ)"
+                    $proc = Start-Process $file -PassThru
+
+                    # รอให้ FiveM.exe ปรากฏใน AppData (max 5 นาที)
+                    $deadline = (Get-Date).AddMinutes(5)
+                    while ((Get-Date) -lt $deadline) {
+                        $exe = Get-ChildItem "$env:LOCALAPPDATA\FiveM" -Filter "FiveM.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+                        if ($null -ne $exe) { break }
+                        Start-Sleep -Seconds 5
+                    }
+
+                    # Kill installer process เมื่อตรวจพบว่าติดตั้งแล้ว
+                    if (-not $proc.HasExited) { $proc | Stop-Process -Force -ErrorAction SilentlyContinue }
+                    # Kill FiveM ที่อาจยังเปิดอยู่
+                    Get-Process -Name "FiveM*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+                    if (Check-FiveM) {
+                        Write-OK "FiveM installed"
+                        $ok = $true
+                    } else {
+                        Write-Fail "FiveM: install timed out or failed"
+                    }
                 } catch { Write-Fail "Failed: $_" }
             }
 
