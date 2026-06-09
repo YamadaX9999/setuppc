@@ -5,7 +5,7 @@
 
 #Requires -RunAsAdministrator
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 
 # ── Helpers ─────────────────────────────────────────────────
 function Write-Header {
@@ -29,7 +29,7 @@ function Is-Installed($name) {
     )
     $found = Get-ItemProperty $paths -ErrorAction SilentlyContinue |
              Where-Object { $_.DisplayName -like "*$name*" }
-    return ($null -ne $found)
+    return [bool]($found)
 }
 
 function Download-File($url, $dest) {
@@ -150,7 +150,18 @@ try {
             "7-Zip" {
                 try {
                     $file = "$tmp\7zip.exe"
-                    Download-File "https://www.7-zip.org/a/7z2407-x64.exe" $file
+                    Write-Step "Fetching latest 7-Zip version ..."
+                    # ดึง version ล่าสุดจาก sourceforge แทนที่จะ hardcode URL
+                    $page = Invoke-WebRequest "https://www.7-zip.org/download.html" -UseBasicParsing -ErrorAction Stop
+                    $match = [regex]::Match($page.Content, 'href="(a/7z[\d]+-x64\.exe)"')
+                    if ($match.Success) {
+                        $url = "https://www.7-zip.org/" + $match.Groups[1].Value
+                    } else {
+                        # fallback ถ้า scrape ไม่ได้
+                        $url = "https://www.7-zip.org/a/7z2407-x64.exe"
+                    }
+                    Write-Step "Downloading from $url ..."
+                    Download-File $url $file
                     Start-Process $file -ArgumentList "/S" -Wait
                     Write-OK "7-Zip installed"
                 } catch { Write-Fail "Failed: $_" }
