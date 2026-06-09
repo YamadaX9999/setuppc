@@ -63,8 +63,8 @@ function Check-NvidiaDriver {
         "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
     )
     $found = Get-ItemProperty $paths -ErrorAction SilentlyContinue |
-             Where-Object { $_.DisplayName -like "*NVIDIA*" -and $_.DisplayVersion -like "610.47*" }
-    return ($null -ne $found)
+             Where-Object { $_.DisplayName -like "*NVIDIA*" -and $_.DisplayVersion -match "^610\.47" }
+    return [bool]($found)
 }
 
 function Get-InstalledStatus($prog) {
@@ -123,27 +123,40 @@ if ($confirm -notmatch "^[Yy]$") {
 $tmp = "$env:TEMP\autoinstall"
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 
+$results = @()  # เก็บผล success/fail แต่ละโปรแกรม
+
 try {
     foreach ($prog in $toInstall) {
-        Write-Header
-        Write-Step "Installing $($prog.Name) ..."
+            Write-Header
+            Write-Step "Installing $($prog.Name) ..."
+            $ok = $false
 
-        switch ($prog.Check) {
+            switch ($prog.Check) {
 
             # ── .NET 4.8 ────────────────────────────────────
             "NET48" {
+                $net48ok = $false
                 try {
                     $file = "$tmp\ndp48.exe"
                     Write-Step "Downloading .NET Framework 4.8 ..."
                     Download-File "https://go.microsoft.com/fwlink/?LinkId=2085155" $file
                     Write-Step "Installing (this may take a while) ..."
-                    Start-Process $file -ArgumentList "/q /norestart" -Wait
-                    Write-OK ".NET Framework 4.8 installed"
+                    $p = Start-Process $file -ArgumentList "/q /norestart" -Wait -PassThru
+                    # exit code 0 = success, 3010 = success + reboot needed
+                    if ($p.ExitCode -eq 0 -or $p.ExitCode -eq 3010) {
+                        Write-OK ".NET Framework 4.8 installed"
+                        $net48ok = $true
+                        $ok = $true
+                    } else {
+                        Write-Fail ".NET Framework 4.8 installer exited with code $($p.ExitCode)"
+                    }
                 } catch { Write-Fail "Failed: $_" }
-                Write-Host ""
-                Write-Host "!! REBOOT required. After reboot, run this script again to continue. !!" -ForegroundColor Red
-                Read-Host "Press Enter to exit"
-                exit 0
+                if ($net48ok) {
+                    Write-Host ""
+                    Write-Host "!! REBOOT required. After reboot, run this script again to continue. !!" -ForegroundColor Red
+                    Read-Host "Press Enter to exit"
+                    exit 0
+                }
             }
 
             # ── 7-Zip ────────────────────────────────────────
@@ -164,6 +177,7 @@ try {
                     Download-File $url $file
                     Start-Process $file -ArgumentList "/S" -Wait
                     Write-OK "7-Zip installed"
+                    $ok = $true
                 } catch { Write-Fail "Failed: $_" }
             }
 
@@ -174,6 +188,7 @@ try {
                     Download-File "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x86" $file
                     Start-Process $file -ArgumentList "--silent" -Wait
                     Write-OK "Discord installed"
+                    $ok = $true
                 } catch { Write-Fail "Failed: $_" }
             }
 
@@ -184,6 +199,7 @@ try {
                     Download-File "https://cdn.akamai.steamstatic.com/client/installer/SteamSetup.exe" $file
                     Start-Process $file -ArgumentList "/S" -Wait
                     Write-OK "Steam installed"
+                    $ok = $true
                 } catch { Write-Fail "Failed: $_" }
             }
 
@@ -210,6 +226,7 @@ try {
                     }
                     if (Is-Installed "Rockstar Games Launcher") {
                         Write-OK "Rockstar Games Launcher installed"
+                        $ok = $true
                     } else {
                         Write-Fail "Rockstar: timed out or cancelled — continuing to next program"
                     }
@@ -223,6 +240,7 @@ try {
                     Download-File "https://dl.razerzone.com/drivers/Synapse4/RazerSynapseInstaller.exe" $file
                     Start-Process $file -ArgumentList "/S" -Wait
                     Write-OK "Razer Synapse installed"
+                    $ok = $true
                 } catch { Write-Fail "Failed: $_" }
             }
 
@@ -233,6 +251,7 @@ try {
                     Download-File "https://github.com/fxsound2/fxsound-app/releases/download/latest/fxsound_setup.exe" $file
                     Start-Process $file -ArgumentList "/S" -Wait
                     Write-OK "FXSound installed"
+                    $ok = $true
                 } catch { Write-Fail "Failed: $_" }
             }
 
@@ -266,6 +285,7 @@ try {
                             $lnk.Save()
                             Write-OK "Shortcut created on Desktop"
                         }
+                        $ok = $true
                     }
                 } catch { Write-Fail "Failed: $_" }
             }
@@ -278,14 +298,33 @@ try {
                     Download-File "https://us.download.nvidia.com/Windows/610.47/610.47-desktop-win10-win11-64bit-international-dch-whql.exe" $file
                     Start-Process $file -ArgumentList "-s -noreboot" -Wait
                     Write-OK "NVIDIA Driver 610.47 installed"
+                    $ok = $true
                 } catch { Write-Fail "Failed: $_" }
             }
         }
+
+        $results += [PSCustomObject]@{ Name = $prog.Name; OK = $ok }
     }
 
-    # ── Done ─────────────────────────────────────────────────
+    # ── Summary ──────────────────────────────────────────────
     Write-Header
-    Write-Host "Installation complete!" -ForegroundColor Cyan
+    Write-Host "Installation Summary:" -ForegroundColor Cyan
+    Write-Host ""
+    $failCount = 0
+    foreach ($r in $results) {
+        if ($r.OK) {
+            Write-Host "  [OK] $($r.Name)" -ForegroundColor Green
+        } else {
+            Write-Host "  [!!] $($r.Name) — FAILED" -ForegroundColor Red
+            $failCount++
+        }
+    }
+    Write-Host ""
+    if ($failCount -eq 0) {
+        Write-Host "All programs installed successfully!" -ForegroundColor Green
+    } else {
+        Write-Host "$failCount program(s) failed. Check the messages above." -ForegroundColor Red
+    }
     Write-Host ""
 
 } finally {
