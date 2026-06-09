@@ -181,8 +181,19 @@ try {
                 try {
                     $file = "$tmp\RockstarLauncher.exe"
                     Download-File "https://gamedownloads.rockstargames.com/public/installer/Rockstar-Games-Launcher.exe" $file
-                    Start-Process $file -ArgumentList "/S" -Wait
-                    Write-OK "Rockstar Games Launcher installed"
+                    # Rockstar spawns child process — ใช้ PassThru แล้วรอ registry confirm
+                    $proc = Start-Process $file -ArgumentList "/SILENT /LANG=1033" -PassThru
+                    $proc.WaitForExit()
+                    # รอ child process ติดตั้งเสร็จ (max 3 นาที)
+                    $deadline = (Get-Date).AddMinutes(3)
+                    while (-not (Is-Installed "Rockstar Games Launcher") -and (Get-Date) -lt $deadline) {
+                        Start-Sleep -Seconds 5
+                    }
+                    if (Is-Installed "Rockstar Games Launcher") {
+                        Write-OK "Rockstar Games Launcher installed"
+                    } else {
+                        Write-Fail "Rockstar: timed out or cancelled — continuing to next program"
+                    }
                 } catch { Write-Fail "Failed: $_" }
             }
 
