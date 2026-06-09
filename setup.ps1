@@ -137,7 +137,11 @@ foreach ($prog in $toInstall) {
 Write-Host ""
 
 # ── ถามยืนยัน ─────────────────────────────────────────────────
-$confirm = Read-Host "Proceed with installation? (Y/N)"
+# ล้าง stdin ที่อาจค้างอยู่ก่อนถาม
+$Host.UI.RawUI.FlushInputBuffer()
+do {
+    $confirm = Read-Host "Proceed with installation? (Y/N)"
+} while ($confirm -notmatch "^[YyNn]$")
 if ($confirm -notmatch "^[Yy]$") {
     Write-Host "Cancelled." -ForegroundColor DarkGray
     exit 0
