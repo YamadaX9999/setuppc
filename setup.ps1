@@ -39,15 +39,15 @@ function Download-File($url, $dest) {
 
 # ── Program definitions ──────────────────────────────────────
 $programs = @(
-    @{ Name = ".NET Framework 4.8"; Check = "NET48";    Special = $true  }
-    @{ Name = "7-Zip";              Check = "7-Zip";    Special = $false }
-    @{ Name = "Discord";            Check = "Discord";  Special = $false }
-    @{ Name = "Steam";              Check = "Steam";    Special = $false }
-    @{ Name = "Rockstar Games Launcher"; Check = "Rockstar Games Launcher"; Special = $false }
-    @{ Name = "Razer Synapse";      Check = "Razer Synapse"; Special = $false }
-    @{ Name = "FXSound";            Check = "FXSound";  Special = $false }
-    @{ Name = "LosslessCut";        Check = "LOSSLESSCUT"; Special = $true  }
-    @{ Name = "NVIDIA Driver 610.47"; Check = "NVIDIA_DRIVER"; Special = $true }
+    @{ Name = ".NET Framework 4.8";       Check = "NET48";                   Special = $true  }
+    @{ Name = "7-Zip";                    Check = "7-Zip";                   Special = $false }
+    @{ Name = "Discord";                  Check = "Discord";                 Special = $false }
+    @{ Name = "Steam";                    Check = "Steam";                   Special = $false }
+    @{ Name = "Rockstar Games Launcher";  Check = "Rockstar Games Launcher"; Special = $false }
+    @{ Name = "Razer Synapse";            Check = "Razer Synapse";           Special = $false }
+    @{ Name = "FXSound";                  Check = "FXSound";                 Special = $false }
+    @{ Name = "LosslessCut";              Check = "LOSSLESSCUT";             Special = $true  }
+    @{ Name = "NVIDIA Driver 610.47";     Check = "NVIDIA_DRIVER";           Special = $true  }
 )
 
 # ── Special check functions ──────────────────────────────────
@@ -68,7 +68,6 @@ function Check-NvidiaDriver {
 }
 
 function Check-LosslessCut {
-    # LosslessCut เป็น portable ไม่มี registry entry — เช็คจาก path แทน
     $paths = @(
         "C:\Program Files\LosslessCut\LosslessCut.exe",
         "$env:LOCALAPPDATA\Programs\LosslessCut\LosslessCut.exe",
@@ -88,62 +87,55 @@ function Get-InstalledStatus($prog) {
 }
 
 # ============================================================
-#  PHASE 1: SCAN
+#  FUNCTION: Install Programs
 # ============================================================
-Write-Header
-Write-Host "Scanning installed programs ..." -ForegroundColor Cyan
-Write-Host ""
+function Start-Install {
+    # ── SCAN ────────────────────────────────────────────────
+    Write-Header
+    Write-Host "Scanning installed programs ..." -ForegroundColor Cyan
+    Write-Host ""
 
-$toInstall = @()
-
-foreach ($prog in $programs) {
-    $installed = Get-InstalledStatus $prog
-    if ($installed) {
-        Write-Host "  [INSTALLED] $($prog.Name)" -ForegroundColor Green
-    } else {
-        Write-Host "  [MISSING]   $($prog.Name)" -ForegroundColor Red
-        $toInstall += $prog
+    $toInstall = @()
+    foreach ($prog in $programs) {
+        $installed = Get-InstalledStatus $prog
+        if ($installed) {
+            Write-Host "  [INSTALLED] $($prog.Name)" -ForegroundColor Green
+        } else {
+            Write-Host "  [MISSING]   $($prog.Name)" -ForegroundColor Red
+            $toInstall += $prog
+        }
     }
-}
+    Write-Host ""
 
-Write-Host ""
+    if ($toInstall.Count -eq 0) {
+        Write-Host "All programs are already installed. Nothing to do!" -ForegroundColor Green
+        Read-Host "Press Enter to continue"
+        return
+    }
 
-# ── ถ้าครบแล้ว ────────────────────────────────────────────────
-if ($toInstall.Count -eq 0) {
-    Write-Host "All programs are already installed. Nothing to do!" -ForegroundColor Green
-    Read-Host "Press Enter to exit"
-    exit 0
-}
-
-# ── แสดงรายการที่จะติดตั้ง ────────────────────────────────────
-Write-Host "The following $($toInstall.Count) program(s) will be installed:" -ForegroundColor Yellow
-foreach ($prog in $toInstall) {
-    Write-Host "  - $($prog.Name)" -ForegroundColor Yellow
-}
-Write-Host ""
-
-# ── ถามยืนยัน ─────────────────────────────────────────────────
-# ล้าง stdin และรอ input จริงจากคีย์บอร์ดเท่านั้น
-$Host.UI.RawUI.FlushInputBuffer()
-$confirm = ""
-while ($confirm -notmatch "^[YyNn]$") {
-    $confirm = (Read-Host "Proceed with installation? (Y/N)").Trim()
-}
-if ($confirm -notmatch "^[Yy]$") {
-    Write-Host "Cancelled." -ForegroundColor DarkGray
-    exit 0
-}
-
-# ============================================================
-#  PHASE 2: INSTALL
-# ============================================================
-$tmp = "$env:TEMP\autoinstall"
-New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-
-$results = @()  # เก็บผล success/fail แต่ละโปรแกรม
-
-try {
+    Write-Host "The following $($toInstall.Count) program(s) will be installed:" -ForegroundColor Yellow
     foreach ($prog in $toInstall) {
+        Write-Host "  - $($prog.Name)" -ForegroundColor Yellow
+    }
+    Write-Host ""
+
+    $Host.UI.RawUI.FlushInputBuffer()
+    $confirm = ""
+    while ($confirm -notmatch "^[YyNn]$") {
+        $confirm = (Read-Host "Proceed with installation? (Y/N)").Trim()
+    }
+    if ($confirm -notmatch "^[Yy]$") {
+        Write-Host "Cancelled." -ForegroundColor DarkGray
+        return
+    }
+
+    # ── INSTALL ─────────────────────────────────────────────
+    $tmp = "$env:TEMP\autoinstall"
+    New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+    $results = @()
+
+    try {
+        foreach ($prog in $toInstall) {
             Write-Header
             Write-Step "Installing $($prog.Name) ..."
             $ok = $false
@@ -159,7 +151,6 @@ try {
                     Download-File "https://go.microsoft.com/fwlink/?LinkId=2085155" $file
                     Write-Step "Installing (this may take a while) ..."
                     $p = Start-Process $file -ArgumentList "/q /norestart" -Wait -PassThru
-                    # exit code 0 = success, 3010 = success + reboot needed
                     if ($p.ExitCode -eq 0 -or $p.ExitCode -eq 3010) {
                         Write-OK ".NET Framework 4.8 installed"
                         $net48ok = $true
@@ -181,13 +172,11 @@ try {
                 try {
                     $file = "$tmp\7zip.exe"
                     Write-Step "Fetching latest 7-Zip version ..."
-                    # ดึง version ล่าสุดจาก sourceforge แทนที่จะ hardcode URL
                     $page = Invoke-WebRequest "https://www.7-zip.org/download.html" -UseBasicParsing -ErrorAction Stop
                     $match = [regex]::Match($page.Content, 'href="(a/7z[\d]+-x64\.exe)"')
                     if ($match.Success) {
                         $url = "https://www.7-zip.org/" + $match.Groups[1].Value
                     } else {
-                        # fallback ถ้า scrape ไม่ได้
                         $url = "https://www.7-zip.org/a/7z2407-x64.exe"
                     }
                     Write-Step "Downloading from $url ..."
@@ -225,18 +214,13 @@ try {
                 try {
                     $file = "$tmp\RockstarLauncher.exe"
                     Download-File "https://gamedownloads.rockstargames.com/public/installer/Rockstar-Games-Launcher.exe" $file
-                    # Rockstar spawns child process — ใช้ PassThru แล้วรอ registry confirm
                     $proc = Start-Process $file -ArgumentList "/SILENT /LANG=1033" -PassThru
                     $proc.WaitForExit()
-
-                    # รอให้ child process ทุกตัวของ Rockstar หายไปก่อน (max 5 นาที)
                     Write-Step "Waiting for Rockstar child processes to finish ..."
                     $deadline2 = (Get-Date).AddMinutes(5)
                     while ((Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*Rockstar*" }) -and (Get-Date) -lt $deadline2) {
                         Start-Sleep -Seconds 5
                     }
-
-                    # รอ registry ยืนยัน (max 3 นาที)
                     $deadline = (Get-Date).AddMinutes(3)
                     while (-not (Is-Installed "Rockstar Games Launcher") -and (Get-Date) -lt $deadline) {
                         Start-Sleep -Seconds 5
@@ -273,11 +257,10 @@ try {
             }
 
             # ── LosslessCut ──────────────────────────────────
-            "LosslessCut" {
+            "LOSSLESSCUT" {
                 try {
                     Write-Step "Fetching latest version from GitHub ..."
                     $api   = Invoke-RestMethod "https://api.github.com/repos/mifi/lossless-cut/releases/latest"
-                    # Release มีแค่ .7z ไม่มี .exe installer
                     $asset = $api.assets | Where-Object { $_.name -match "(?i)^LosslessCut-win-x64\.7z$" } | Select-Object -First 1
                     if ($null -eq $asset) {
                         Write-Fail "LosslessCut: installer asset not found in GitHub release"
@@ -286,7 +269,6 @@ try {
                         $dest    = "C:\Program Files\LosslessCut"
                         Write-Step "Downloading $($asset.name) ..."
                         Download-File $asset.browser_download_url $archive
-                        # แตกไฟล์ด้วย 7-Zip (ติดตั้งไปก่อนหน้าแล้วในลำดับ $programs)
                         $7z = "C:\Program Files\7-Zip\7z.exe"
                         if (-not (Test-Path $7z)) { $7z = "C:\Program Files (x86)\7-Zip\7z.exe" }
                         Write-Step "Extracting to $dest ..."
@@ -344,9 +326,99 @@ try {
     }
     Write-Host ""
 
-} finally {
-    Write-Host "Cleaning up temp files ..." -ForegroundColor DarkGray
-    Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    } finally {
+        Write-Host "Cleaning up temp files ..." -ForegroundColor DarkGray
+        Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# ============================================================
+#  FUNCTION: Import FiveM Settings
+# ============================================================
+function Start-ImportFiveM {
+    Write-Header
+    Write-Host "Importing FiveM Settings from GitHub ..." -ForegroundColor Cyan
+    Write-Host ""
+
+    $cfxDest = "$env:APPDATA\CitizenFX"
+    $cfxBase = "https://raw.githubusercontent.com/YamadaX9999/setuppc/main/CitizenFX"
+
+    # ไฟล์ปกติ
+    $cfxFiles = @(
+        "fivem.cfg",
+        "gta5_settings.xml",
+        "camera_save_structure.xml",
+        "ros_id.dat"
+    )
+
+    # ไฟล์ใน subfolder kvs
+    $kvsFiles = @(
+        "000005.ldb",
+        "000008.ldb",
+        "000011.ldb",
+        "000014.log",
+        "CURRENT",
+        "LOCK",
+        "MANIFEST-000013"
+    )
+
+    New-Item -ItemType Directory -Force -Path $cfxDest | Out-Null
+    New-Item -ItemType Directory -Force -Path "$cfxDest\kvs" | Out-Null
+
+    $allOk = $true
+
+    # ดาวน์โหลดไฟล์หลัก
+    foreach ($file in $cfxFiles) {
+        try {
+            Write-Step "Downloading $file ..."
+            Download-File "$cfxBase/$file" "$cfxDest\$file"
+            Write-OK "$file imported"
+        } catch {
+            Write-Fail "Failed to import $file : $_"
+            $allOk = $false
+        }
+    }
+
+    # ดาวน์โหลดไฟล์ใน kvs
+    foreach ($file in $kvsFiles) {
+        try {
+            Write-Step "Downloading kvs\$file ..."
+            Download-File "$cfxBase/kvs/$file" "$cfxDest\kvs\$file"
+            Write-OK "kvs\$file imported"
+        } catch {
+            Write-Fail "Failed to import kvs\$file : $_"
+            $allOk = $false
+        }
+    }
+
+    Write-Host ""
+    if ($allOk) {
+        Write-OK "FiveM settings imported successfully!"
+    } else {
+        Write-Fail "Some files failed to import — check messages above"
+    }
+}
+
+# ============================================================
+#  MAIN MENU
+# ============================================================
+Write-Header
+Write-Host "Please select an option:" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  1. Install programs" -ForegroundColor Yellow
+Write-Host "  2. Import FiveM settings" -ForegroundColor Yellow
+Write-Host "  3. Both (Install then Import)" -ForegroundColor Yellow
+Write-Host ""
+
+$choice = ""
+while ($choice -notmatch "^[123]$") {
+    $choice = (Read-Host "Enter choice (1/2/3)").Trim()
+}
+
+switch ($choice) {
+    "1" { Start-Install }
+    "2" { Start-ImportFiveM }
+    "3" { Start-Install; Start-ImportFiveM }
 }
 
 Write-Host ""
