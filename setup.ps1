@@ -46,7 +46,7 @@ $programs = @(
     @{ Name = "Rockstar Games Launcher"; Check = "Rockstar Games Launcher"; Special = $false }
     @{ Name = "Razer Synapse";      Check = "Razer Synapse"; Special = $false }
     @{ Name = "FXSound";            Check = "FXSound";  Special = $false }
-    @{ Name = "LosslessCut";        Check = "LosslessCut"; Special = $false }
+    @{ Name = "LosslessCut";        Check = "LOSSLESSCUT"; Special = $true  }
     @{ Name = "FiveM";              Check = "FIVEM";       Special = $true  }
     @{ Name = "NVIDIA Driver 610.47"; Check = "NVIDIA_DRIVER"; Special = $true }
 )
@@ -68,6 +68,17 @@ function Check-NvidiaDriver {
     return [bool]($found)
 }
 
+function Check-LosslessCut {
+    # LosslessCut เป็น portable ไม่มี registry entry — เช็คจาก path แทน
+    $paths = @(
+        "C:\Program Files\LosslessCut\LosslessCut.exe",
+        "$env:LOCALAPPDATA\Programs\LosslessCut\LosslessCut.exe",
+        "$env:PUBLIC\Desktop\LosslessCut.lnk"
+    )
+    foreach ($p in $paths) { if (Test-Path $p) { return $true } }
+    return $false
+}
+
 function Check-FiveM {
     # เช็คจาก registry ก่อน
     if (Is-Installed "FiveM") { return $true }
@@ -84,6 +95,7 @@ function Get-InstalledStatus($prog) {
     switch ($prog.Check) {
         "NET48"         { return Check-NET48 }
         "NVIDIA_DRIVER" { return Check-NvidiaDriver }
+        "LOSSLESSCUT"   { return Check-LosslessCut }
         "FIVEM"         { return Check-FiveM }
         default         { return Is-Installed $prog.Check }
     }
