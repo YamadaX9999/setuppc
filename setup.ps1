@@ -47,7 +47,6 @@ $programs = @(
     @{ Name = "Razer Synapse";      Check = "Razer Synapse"; Special = $false }
     @{ Name = "FXSound";            Check = "FXSound";  Special = $false }
     @{ Name = "LosslessCut";        Check = "LOSSLESSCUT"; Special = $true  }
-    @{ Name = "FiveM";              Check = "FIVEM";       Special = $true  }
     @{ Name = "NVIDIA Driver 610.47"; Check = "NVIDIA_DRIVER"; Special = $true }
 )
 
@@ -79,29 +78,11 @@ function Check-LosslessCut {
     return $false
 }
 
-function Check-FiveM {
-    # เช็คจาก registry ก่อน
-    if (Is-Installed "FiveM") { return $true }
-    # fallback เช็คจาก path ที่ FiveM มักติดตั้งอยู่
-    $paths = @(
-        "$env:LOCALAPPDATA\FiveM\FiveM.exe",
-        "$env:LOCALAPPDATA\FiveM\app\FiveM.exe"
-    )
-    foreach ($p in $paths) { if (Test-Path $p) { return $true } }
-    # เช็ค .exe ใน subfolder ทั้งหมด (รองรับทุก build version)
-    if (Test-Path "$env:LOCALAPPDATA\FiveM") {
-        $exe = Get-ChildItem "$env:LOCALAPPDATA\FiveM" -Filter "FiveM.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-        return ($null -ne $exe)
-    }
-    return $false
-}
-
 function Get-InstalledStatus($prog) {
     switch ($prog.Check) {
         "NET48"         { return Check-NET48 }
         "NVIDIA_DRIVER" { return Check-NvidiaDriver }
         "LOSSLESSCUT"   { return Check-LosslessCut }
-        "FIVEM"         { return Check-FiveM }
         default         { return Is-Installed $prog.Check }
     }
 }
@@ -322,78 +303,6 @@ try {
                             Write-OK "Shortcut created on Desktop"
                         }
                         $ok = $true
-                    }
-                } catch { Write-Fail "Failed: $_" }
-            }
-
-            # ── FiveM ────────────────────────────────────────
-            "FIVEM" {
-                try {
-                    # ค้นหา GTAV จาก Steam ก่อน — FiveM ต้องการ path ของ GTAV
-                    Write-Step "Locating GTA V (Steam) ..."
-                    $gtavPath = $null
-
-                    # วิธีที่ 1: อ่านจาก Steam libraryfolders.vdf
-                    $steamBase = (Get-ItemProperty "HKLM:\SOFTWARE\WOW6432Node\Valve\Steam" -ErrorAction SilentlyContinue).InstallPath
-                    if (-not $steamBase) {
-                        $steamBase = (Get-ItemProperty "HKLM:\SOFTWARE\Valve\Steam" -ErrorAction SilentlyContinue).InstallPath
-                    }
-                    if ($steamBase) {
-                        $vdf = "$steamBase\steamapps\libraryfolders.vdf"
-                        if (Test-Path $vdf) {
-                            $vdfContent = Get-Content $vdf -Raw
-                            # ดึง path ทุก library จาก vdf
-                            $libPaths = [regex]::Matches($vdfContent, '"path"\s+"([^"]+)"') |
-                                        ForEach-Object { $_.Groups[1].Value -replace '\\', '' }
-                            # เพิ่ม library หลักด้วย
-                            $libPaths = @($steamBase) + $libPaths
-                            foreach ($lib in $libPaths) {
-                                $candidate = "$lib\steamapps\common\Grand Theft Auto V"
-                                if (Test-Path "$candidate\GTA5.exe") {
-                                    $gtavPath = $candidate
-                                    break
-                                }
-                            }
-                        }
-                    }
-
-                    if ($gtavPath) {
-                        Write-OK "Found GTA V at: $gtavPath"
-                        Write-Host ""
-                        Write-Host "  *** เมื่อ FiveM เปิด dialog ให้เลือกไฟล์ ***" -ForegroundColor Cyan
-                        Write-Host "  *** ให้ไปที่: $gtavPath\GTA5.exe           ***" -ForegroundColor Cyan
-                        Write-Host ""
-                    } else {
-                        Write-Fail "GTA V not found in any Steam library — FiveM requires GTA V to be installed first"
-                        # ไม่ติดตั้ง FiveM ถ้าไม่เจอ GTAV
-                        break
-                    }
-
-                    # ดาวน์โหลดและติดตั้ง FiveM
-                    $file = "$tmp\FiveM.exe"
-                    Write-Step "Downloading FiveM ..."
-                    Download-File "https://runtime.fivem.net/client/FiveM.exe" $file
-                    Write-Step "Installing FiveM ... (ทำตามขั้นตอนบนหน้าจอ จากนั้นปิด FiveM เพื่อดำเนินการต่อ)"
-                    $proc = Start-Process $file -PassThru
-
-                    # รอให้ FiveM.exe ปรากฏใน AppData (max 5 นาที)
-                    $deadline = (Get-Date).AddMinutes(5)
-                    while ((Get-Date) -lt $deadline) {
-                        $exe = Get-ChildItem "$env:LOCALAPPDATA\FiveM" -Filter "FiveM.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-                        if ($null -ne $exe) { break }
-                        Start-Sleep -Seconds 5
-                    }
-
-                    # Kill installer process เมื่อตรวจพบว่าติดตั้งแล้ว
-                    if (-not $proc.HasExited) { $proc | Stop-Process -Force -ErrorAction SilentlyContinue }
-                    # Kill FiveM ที่อาจยังเปิดอยู่
-                    Get-Process -Name "FiveM*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-
-                    if (Check-FiveM) {
-                        Write-OK "FiveM installed"
-                        $ok = $true
-                    } else {
-                        Write-Fail "FiveM: install timed out or failed"
                     }
                 } catch { Write-Fail "Failed: $_" }
             }
