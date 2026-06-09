@@ -184,7 +184,15 @@ try {
                     # Rockstar spawns child process — ใช้ PassThru แล้วรอ registry confirm
                     $proc = Start-Process $file -ArgumentList "/SILENT /LANG=1033" -PassThru
                     $proc.WaitForExit()
-                    # รอ child process ติดตั้งเสร็จ (max 3 นาที)
+
+                    # รอให้ child process ทุกตัวของ Rockstar หายไปก่อน (max 5 นาที)
+                    Write-Step "Waiting for Rockstar child processes to finish ..."
+                    $deadline2 = (Get-Date).AddMinutes(5)
+                    while ((Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*Rockstar*" }) -and (Get-Date) -lt $deadline2) {
+                        Start-Sleep -Seconds 5
+                    }
+
+                    # รอ registry ยืนยัน (max 3 นาที)
                     $deadline = (Get-Date).AddMinutes(3)
                     while (-not (Is-Installed "Rockstar Games Launcher") -and (Get-Date) -lt $deadline) {
                         Start-Sleep -Seconds 5
@@ -222,15 +230,31 @@ try {
                 try {
                     Write-Step "Fetching latest version from GitHub ..."
                     $api   = Invoke-RestMethod "https://api.github.com/repos/mifi/lossless-cut/releases/latest"
-                    $asset = $api.assets | Where-Object { $_.name -match "(?i)win.*x64.*Setup.*\.exe$" } | Select-Object -First 1
+                    # Release มีแค่ .7z ไม่มี .exe installer
+                    $asset = $api.assets | Where-Object { $_.name -match "(?i)^LosslessCut-win-x64\.7z$" } | Select-Object -First 1
                     if ($null -eq $asset) {
                         Write-Fail "LosslessCut: installer asset not found in GitHub release"
                     } else {
-                        $file = "$tmp\LosslessCutSetup.exe"
+                        $archive = "$tmp\LosslessCut.7z"
+                        $dest    = "C:\Program Files\LosslessCut"
                         Write-Step "Downloading $($asset.name) ..."
-                        Download-File $asset.browser_download_url $file
-                        Start-Process $file -ArgumentList "/S" -Wait
-                        Write-OK "LosslessCut installed"
+                        Download-File $asset.browser_download_url $archive
+                        # แตกไฟล์ด้วย 7-Zip (ติดตั้งไปก่อนหน้าแล้วในลำดับ $programs)
+                        $7z = "C:\Program Files\7-Zip\7z.exe"
+                        if (-not (Test-Path $7z)) { $7z = "C:\Program Files (x86)\7-Zip\7z.exe" }
+                        Write-Step "Extracting to $dest ..."
+                        Start-Process $7z -ArgumentList "x `"$archive`" -o`"$dest`" -y" -Wait
+                        Write-OK "LosslessCut extracted to $dest"
+                        Write-Step "Creating desktop shortcut ..."
+                        $exe = Get-ChildItem "$dest" -Filter "LosslessCut.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+                        if ($exe) {
+                            $shortcut = "$env:PUBLIC\Desktop\LosslessCut.lnk"
+                            $wsh = New-Object -ComObject WScript.Shell
+                            $lnk = $wsh.CreateShortcut($shortcut)
+                            $lnk.TargetPath = $exe.FullName
+                            $lnk.Save()
+                            Write-OK "Shortcut created on Desktop"
+                        }
                     }
                 } catch { Write-Fail "Failed: $_" }
             }
