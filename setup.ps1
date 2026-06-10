@@ -530,7 +530,6 @@ function Show-Menu {
     Write-Host "    2.  Import FiveM settings" -ForegroundColor Yellow
     Write-Host "    3.  Exit" -ForegroundColor DarkGray
     Write-Host ""
-    $Host.UI.RawUI.FlushInputBuffer()
     $c = (Read-Host "  Choice (1/2/3)").Trim()
     return $c
 }
