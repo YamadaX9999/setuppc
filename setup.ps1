@@ -33,8 +33,34 @@ function Is-Installed($name) {
 }
 
 function Download-File($url, $dest) {
-    $wc = New-Object System.Net.WebClient
-    $wc.DownloadFile($url, $dest)
+    $fileName = Split-Path $dest -Leaf
+    try {
+        # Try BITS first — shows real % progress bar
+        Import-Module BitsTransfer -ErrorAction Stop
+        Start-BitsTransfer -Source $url -Destination $dest `
+            -DisplayName "Downloading $fileName" `
+            -Description $url `
+            -ErrorAction Stop
+    } catch {
+        # Fallback: WebClient with progress
+        Write-Host "    (BITS unavailable, using WebClient ...)" -ForegroundColor DarkGray
+        $wc = New-Object System.Net.WebClient
+        $wc.add_DownloadProgressChanged({
+            param($s, $e)
+            $pct = $e.ProgressPercentage
+            $dl  = [math]::Round($e.BytesReceived / 1MB, 1)
+            $tot = if ($e.TotalBytesToReceive -gt 0) { [math]::Round($e.TotalBytesToReceive / 1MB, 1) } else { "?" }
+            Write-Progress -Activity "Downloading $fileName" `
+                -Status "$dl MB / $tot MB  ($pct%)" `
+                -PercentComplete ([math]::Max(0, [math]::Min(100, $pct)))
+        })
+        $wc.add_DownloadFileCompleted({
+            Write-Progress -Activity "Downloading $fileName" -Completed
+        })
+        $wc.DownloadFileAsync([uri]$url, $dest)
+        while ($wc.IsBusy) { Start-Sleep -Milliseconds 300 }
+        $wc.Dispose()
+    }
 }
 
 # ── Program definitions ──────────────────────────────────────
@@ -249,8 +275,12 @@ function Start-Install {
             "FXSound" {
                 try {
                     $file = "$tmp\fxsound_setup.exe"
+                    Write-Step "Downloading FXSound ..."
                     Download-File "https://github.com/fxsound2/fxsound-app/releases/download/latest/fxsound_setup.exe" $file
-                    Start-Process $file -ArgumentList "/S" -Wait
+                    Write-Step "Installing FXSound (GUI will open — click through the installer) ..."
+                    # Note: FXSound installer does NOT support /S or silent flags.
+                    # Run without arguments so the GUI installer opens normally.
+                    Start-Process $file -Wait
                     Write-OK "FXSound installed"
                     $ok = $true
                 } catch { Write-Fail "Failed: $_" }
@@ -293,11 +323,16 @@ function Start-Install {
             "NVIDIA_DRIVER" {
                 try {
                     $file = "$tmp\NvidiaSetup.exe"
-                    Write-Step "Downloading NVIDIA Driver 610.47 (~700MB, please wait) ..."
+                    Write-Step "Downloading NVIDIA Driver 610.47 (~700MB) — progress shown below ..."
                     Download-File "https://us.download.nvidia.com/Windows/610.47/610.47-desktop-win10-win11-64bit-international-dch-whql.exe" $file
-                    Start-Process $file -ArgumentList "-s -noreboot" -Wait
-                    Write-OK "NVIDIA Driver 610.47 installed"
-                    $ok = $true
+                    Write-Step "Installing NVIDIA Driver silently (this may take 3-5 minutes) ..."
+                    $p = Start-Process $file -ArgumentList "-s -noreboot" -Wait -PassThru
+                    if ($p.ExitCode -eq 0 -or $p.ExitCode -eq 14) {
+                        Write-OK "NVIDIA Driver 610.47 installed (reboot required to take effect)"
+                        $ok = $true
+                    } else {
+                        Write-Fail "NVIDIA installer exited with code $($p.ExitCode)"
+                    }
                 } catch { Write-Fail "Failed: $_" }
             }
         }
