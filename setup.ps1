@@ -95,14 +95,14 @@ function Download-File($url, $dest, [int]$maxRetry = 2) {
         }
         try {
             if (-not $isGitHub) {
-                # BITS — best for large files, shows real % progress
+                # BITS - best for large files, shows real % progress
                 Import-Module BitsTransfer -ErrorAction Stop
                 Start-BitsTransfer -Source $url -Destination $dest `
                     -DisplayName "Downloading $fileName" `
                     -Description $url `
                     -ErrorAction Stop
             } else {
-                # GitHub uses 302 redirects — BITS fails silently, use WebClient instead
+                # GitHub uses 302 redirects - BITS fails silently, use WebClient instead
                 $wc = New-Object System.Net.WebClient
                 $wc.Headers.Add("User-Agent", "Mozilla/5.0")
                 $wc.add_DownloadProgressChanged({
@@ -126,7 +126,7 @@ function Download-File($url, $dest, [int]$maxRetry = 2) {
 
             # Verify file downloaded and not empty
             if (-not (Test-Path $dest) -or (Get-Item $dest).Length -lt 1024) {
-                throw "Downloaded file is missing or too small — possible redirect/network issue"
+                throw "Downloaded file is missing or too small - possible redirect/network issue"
             }
             return  # success
         } catch {
@@ -279,7 +279,7 @@ function Start-Install {
                         $ok = $true
                         $results += [PSCustomObject]@{ Name = $prog.Name; OK = $ok }
                         Write-Host ""
-                        Write-Host "  !! REBOOT required — run this script again after reboot !!" -ForegroundColor Red
+                        Write-Host "  !! REBOOT required - run this script again after reboot !!" -ForegroundColor Red
                         Write-Host ""
                         Read-Host "  Press Enter to exit"
                         exit 0
@@ -341,29 +341,29 @@ function Start-Install {
                         Write-OK "Rockstar Games Launcher installed"
                         $ok = $true
                     } else {
-                        Write-Fail "Rockstar: timed out — continuing"
+                        Write-Fail "Rockstar: timed out - continuing"
                     }
                 }
 
                 # ── Razer Synapse ──────────────────────────────
-                # Note: Razer Synapse does NOT support /S silent flag — GUI required
+                # Note: Razer Synapse does NOT support /S silent flag - GUI required
                 "Razer Synapse" {
                     $file = "$tmp\RazerSynapse.exe"
                     Write-Step "Downloading Razer Synapse ..."
                     Download-File "https://dl.razerzone.com/drivers/Synapse4/RazerSynapseInstaller.exe" $file
-                    Write-Step "Installing Razer Synapse (GUI will open — click through) ..."
+                    Write-Step "Installing Razer Synapse (GUI will open - click through) ..."
                     Start-Process $file -Wait
                     Write-OK "Razer Synapse installed"
                     $ok = $true
                 }
 
                 # ── FXSound ────────────────────────────────────
-                # Note: FXSound does NOT support /S silent flag — GUI required
+                # Note: FXSound does NOT support /S silent flag - GUI required
                 "FXSound" {
                     $file = "$tmp\fxsound_setup.exe"
                     Write-Step "Downloading FXSound ..."
                     Download-File "https://github.com/fxsound2/fxsound-app/releases/download/latest/fxsound_setup.exe" $file
-                    Write-Step "Installing FXSound (GUI will open — click through) ..."
+                    Write-Step "Installing FXSound (GUI will open - click through) ..."
                     Start-Process $file -Wait
                     Write-OK "FXSound installed"
                     $ok = $true
@@ -421,7 +421,7 @@ function Start-Install {
                 Write-Fail "Unexpected error: $_"
             }
 
-            # Always record result — even if exception occurred above
+            # Always record result - even if exception occurred above
             $results += [PSCustomObject]@{ Name = $prog.Name; OK = $ok }
 
             # Clean up this program's temp file immediately to save disk space
@@ -444,7 +444,7 @@ function Start-Install {
         if ($r.OK) {
             Write-Host "  [OK] $($r.Name)" -ForegroundColor Green
         } else {
-            Write-Host "  [!!] $($r.Name)  — FAILED" -ForegroundColor Red
+            Write-Host "  [!!] $($r.Name)  - FAILED" -ForegroundColor Red
         }
     }
 
@@ -452,7 +452,7 @@ function Start-Install {
     if ($failCount -eq 0) {
         Write-Host "  All $okCount program(s) installed successfully!" -ForegroundColor Green
     } else {
-        Write-Host "  $okCount OK  /  $failCount failed  —  see log: $script:LogFile" -ForegroundColor Yellow
+        Write-Host "  $okCount OK  /  $failCount failed  -  see log: $script:LogFile" -ForegroundColor Yellow
     }
 
     $rebootNeeded = ($results | Where-Object { $_.Name -match "NVIDIA" -and $_.OK })
@@ -492,7 +492,7 @@ function Start-ImportFiveM {
             Download-File "$cfxBase/$file" "$cfxDest\$file"
             Write-OK "$file"
         } catch {
-            Write-Fail "Failed: $file — $_"
+            Write-Fail "Failed: $file - $_"
             $allOk = $false
         }
     }
@@ -504,7 +504,7 @@ function Start-ImportFiveM {
             Download-File "$cfxBase/kvs/$file" "$cfxDest\kvs\$file"
             Write-OK "kvs\$file"
         } catch {
-            Write-Fail "Failed: kvs\$file — $_"
+            Write-Fail "Failed: kvs\$file - $_"
             $allOk = $false
         }
     }
@@ -513,7 +513,7 @@ function Start-ImportFiveM {
     if ($allOk) {
         Write-OK "All FiveM settings imported!"
     } else {
-        Write-Fail "Some files failed — check log: $script:LogFile"
+        Write-Fail "Some files failed - check log: $script:LogFile"
     }
     Write-Log "=== FiveM import ended. allOk=$allOk ==="
 }
