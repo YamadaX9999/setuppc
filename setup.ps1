@@ -230,7 +230,6 @@ function Start-Install {
     if ($toInstall.Count -eq 0) {
         Write-Host "  All programs are already installed!" -ForegroundColor Green
         Write-Host ""
-        Read-Host "  Press Enter to continue"
         return
     }
 
@@ -529,30 +528,26 @@ function Show-Menu {
     Write-Host ""
     Write-Host "    1.  Install programs" -ForegroundColor Yellow
     Write-Host "    2.  Import FiveM settings" -ForegroundColor Yellow
-    Write-Host "    3.  Both (install then import)" -ForegroundColor Yellow
-    Write-Host "    4.  Exit" -ForegroundColor DarkGray
+    Write-Host "    3.  Exit" -ForegroundColor DarkGray
     Write-Host ""
     $Host.UI.RawUI.FlushInputBuffer()
-    $c = (Read-Host "  Choice (1/2/3/4)").Trim()
+    $c = (Read-Host "  Choice (1/2/3)").Trim()
     return $c
 }
 
 while ($true) {
     $choice = ""
-    while ($choice -notmatch "^[1234]$") {
+    while ($choice -notmatch "^[123]$") {
         $choice = Show-Menu
     }
     switch ($choice) {
         "1" { Start-Install }
         "2" { Start-ImportFiveM }
-        "3" { Start-Install; Start-ImportFiveM }
-        "4" {
+        "3" {
             Write-Host ""
             Write-Host "  Bye!" -ForegroundColor DarkGray
             Write-Host ""
             exit 0
         }
     }
-    Write-Host ""
-    Read-Host "  Press Enter to return to menu"
 }
