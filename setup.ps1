@@ -546,6 +546,27 @@ function Start-ImportFiveM {
 # ============================================================
 #  MAIN MENU  (loops until user exits)
 # ============================================================
+# ============================================================
+#  ACTIVATE WINDOWS
+# ============================================================
+function Start-ActivateWindows {
+    Write-Header
+    Write-Log "=== Windows activation started ==="
+    Write-Section "Activating Windows"
+    Write-Info "Running Microsoft Activation Scripts (MAS) ..."
+    Write-Info "A menu will appear - choose option [1] HWID for permanent activation."
+    Write-Host ""
+    try {
+        irm https://get.activated.win | iex
+        Write-Log "MAS script launched"
+    } catch {
+        Write-Fail "Failed to run activation script: $_"
+        Write-Log "Activation error: $_"
+    }
+    Write-Host ""
+    Read-Host "  Press Enter to return to menu"
+}
+
 function Show-Menu {
     Write-Header
     Write-Host "  Log file: $script:LogFile" -ForegroundColor DarkGray
@@ -554,21 +575,23 @@ function Show-Menu {
     Write-Host ""
     Write-Host "    1.  Install programs" -ForegroundColor Yellow
     Write-Host "    2.  Import FiveM settings" -ForegroundColor Yellow
-    Write-Host "    3.  Exit" -ForegroundColor DarkGray
+    Write-Host "    3.  Activate Windows" -ForegroundColor Yellow
+    Write-Host "    4.  Exit" -ForegroundColor DarkGray
     Write-Host ""
-    $c = (Read-Host "  Choice (1/2/3)").Trim()
+    $c = (Read-Host "  Choice (1/2/3/4)").Trim()
     return $c
 }
 
 while ($true) {
     $choice = ""
-    while ($choice -notmatch "^[123]$") {
+    while ($choice -notmatch "^[1234]$") {
         $choice = Show-Menu
     }
     switch ($choice) {
         "1" { Start-Install }
         "2" { Start-ImportFiveM }
-        "3" {
+        "3" { Start-ActivateWindows }
+        "4" {
             Write-Host ""
             Write-Host "  Bye!" -ForegroundColor DarkGray
             Write-Host ""
