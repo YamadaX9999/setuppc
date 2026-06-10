@@ -102,31 +102,16 @@ function Download-File($url, $dest, [int]$maxRetry = 2) {
                     -Description $url `
                     -ErrorAction Stop
             } else {
-                # GitHub uses 302 redirects - BITS fails silently, use WebClient instead
-                $wc = New-Object System.Net.WebClient
-                $wc.Headers.Add("User-Agent", "Mozilla/5.0")
-                $wc.add_DownloadProgressChanged({
-                    param($s, $e)
-                    $pct = $e.ProgressPercentage
-                    $dl  = [math]::Round($e.BytesReceived / 1MB, 1)
-                    $tot = if ($e.TotalBytesToReceive -gt 0) {
-                        [math]::Round($e.TotalBytesToReceive / 1MB, 1)
-                    } else { "?" }
-                    Write-Progress -Activity "  Downloading $fileName" `
-                        -Status "$dl MB / $tot MB  ($pct%)" `
-                        -PercentComplete ([math]::Max(0, [math]::Min(100, $pct)))
-                })
-                $wc.add_DownloadFileCompleted({
-                    Write-Progress -Activity "  Downloading $fileName" -Completed
-                })
-                $wc.DownloadFileAsync([uri]$url, $dest)
-                while ($wc.IsBusy) { Start-Sleep -Milliseconds 300 }
-                $wc.Dispose()
+                # GitHub uses 302 redirects - BITS fails silently, use Invoke-WebRequest instead
+                # (synchronous, exceptions propagate correctly into try/catch)
+                Invoke-WebRequest -Uri $url -OutFile $dest `
+                    -UseBasicParsing -ErrorAction Stop `
+                    -Headers @{ "User-Agent" = "Mozilla/5.0" }
             }
 
-            # Verify file downloaded and not empty
-            if (-not (Test-Path $dest) -or (Get-Item $dest).Length -lt 1024) {
-                throw "Downloaded file is missing or too small - possible redirect/network issue"
+            # Verify file exists (no minimum size - kvs files like CURRENT/LOCK are legitimately tiny)
+            if (-not (Test-Path $dest)) {
+                throw "Downloaded file is missing - possible redirect/network issue"
             }
             return  # success
         } catch {
@@ -169,6 +154,7 @@ $programs = @(
     @{ Name = "FXSound";                 Check = "FXSound";                 Special = $false }
     @{ Name = "LosslessCut";             Check = "LOSSLESSCUT";             Special = $true  }
     @{ Name = "NVIDIA Driver 610.47";    Check = "NVIDIA_DRIVER";           Special = $true  }
+    @{ Name = "FiveM";                   Check = "FiveM";                   Special = $false }
 )
 
 # ============================================================
@@ -230,6 +216,7 @@ function Start-Install {
     if ($toInstall.Count -eq 0) {
         Write-Host "  All programs are already installed!" -ForegroundColor Green
         Write-Host ""
+        Read-Host "  Press Enter to return to menu"
         return
     }
 
@@ -399,7 +386,42 @@ function Start-Install {
                     }
                 }
 
-                # ── NVIDIA Driver ──────────────────────────────
+                # -- FiveM ------------------------------------------------
+                # FiveM now registers in Add/Remove Programs (Cfx.re).
+                # IMPORTANT: Must run installer as the real logged-on user, NOT as
+                # Administrator - otherwise installer writes to Admin profile and
+                # the desktop shortcut ends up in the wrong place (or not at all).
+                # Solution: copy exe to Public, then open it via explorer.exe which
+                # always runs in the user's context regardless of who launched it.
+                "FiveM" {
+                    # Copy to a path the user account can reach (Public is world-readable)
+                    $publicExe = "$env:PUBLIC\FiveM_setup.exe"
+                    Write-Step "Downloading FiveM ..."
+                    Invoke-WebRequest -Uri "https://runtime.fivem.net/client/FiveM.exe" `
+                        -OutFile $publicExe -UseBasicParsing -ErrorAction Stop
+
+                    Write-Step "Launching FiveM installer as current user ..."
+                    Write-Info "A FiveM window will open - complete the installation, then close it."
+                    # explorer.exe launches the target in the interactive user context (not Admin),
+                    # so the installer sees the correct Desktop / AppData paths.
+                    Start-Process "explorer.exe" -ArgumentList $publicExe
+                    Write-Info "Waiting for FiveM to finish installing ..."
+                    # Poll registry until FiveM appears (up to 10 min)
+                    $deadline = (Get-Date).AddMinutes(10)
+                    while ((Get-Date) -lt $deadline) {
+                        if (Is-Installed "FiveM") { break }
+                        Start-Sleep -Seconds 5
+                    }
+                    Remove-Item $publicExe -Force -ErrorAction SilentlyContinue
+                    if (Is-Installed "FiveM") {
+                        Write-OK "FiveM installed"
+                        $ok = $true
+                    } else {
+                        Write-Fail "FiveM installation timed out - please install manually"
+                    }
+                }
+
+                                # ── NVIDIA Driver ──────────────────────────────
                 "NVIDIA_DRIVER" {
                     $file = "$tmp\NvidiaSetup.exe"
                     Write-Step "Downloading NVIDIA Driver 610.47 (~700 MB) ..."
@@ -461,6 +483,8 @@ function Start-Install {
     }
     Write-Host ""
     Write-Log "=== Session ended. OK=$okCount FAIL=$failCount elapsed=$elapsed ==="
+    Write-Host ""
+    Read-Host "  Press Enter to return to menu"
 }
 
 # ============================================================
@@ -515,6 +539,8 @@ function Start-ImportFiveM {
         Write-Fail "Some files failed - check log: $script:LogFile"
     }
     Write-Log "=== FiveM import ended. allOk=$allOk ==="
+    Write-Host ""
+    Read-Host "  Press Enter to return to menu"
 }
 
 # ============================================================
