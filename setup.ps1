@@ -1,13 +1,17 @@
 # ============================================================
-#  setup.ps1  -  Auto Installer for Windows 10 LTSC 1809
+#  setup.ps1  -  Auto Installer
 #  Run: powershell -ExecutionPolicy Bypass -File ".\setup.ps1"
 # ============================================================
 
 #Requires -RunAsAdministrator
 
 $ErrorActionPreference = "Continue"
-$script:LogFile = "$env:TEMP\autoinstall.log"
+$script:LogFile   = "$env:TEMP\autoinstall.log"
 $script:StartTime = Get-Date
+
+# Detect Windows edition name at runtime
+$_os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+$script:WinName = if ($_os) { $_os.Caption.Trim() } else { "Windows" }
 
 # ============================================================
 #  LOGGING
@@ -22,10 +26,12 @@ function Write-Log($msg) {
 # ============================================================
 function Write-Header {
     Clear-Host
+    $title  = "  Auto Installer - $script:WinName  "
+    $border = "=" * ($title.Length)
     Write-Host ""
-    Write-Host "  ============================================" -ForegroundColor Cyan
-    Write-Host "     Auto Installer - Windows 10 LTSC 1809  " -ForegroundColor Cyan
-    Write-Host "  ============================================" -ForegroundColor Cyan
+    Write-Host "  $border" -ForegroundColor Cyan
+    Write-Host $title      -ForegroundColor Cyan
+    Write-Host "  $border" -ForegroundColor Cyan
     Write-Host ""
 }
 
@@ -513,28 +519,40 @@ function Start-ImportFiveM {
 }
 
 # ============================================================
-#  MAIN MENU
+#  MAIN MENU  (loops until user exits)
 # ============================================================
-Write-Header
-Write-Host "  Log file: $script:LogFile" -ForegroundColor DarkGray
-Write-Host ""
-Write-Host "  Select an option:" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "    1.  Install programs" -ForegroundColor Yellow
-Write-Host "    2.  Import FiveM settings" -ForegroundColor Yellow
-Write-Host "    3.  Both (install then import)" -ForegroundColor Yellow
-Write-Host ""
-
-$choice = ""
-while ($choice -notmatch "^[123]$") {
-    $choice = (Read-Host "  Choice (1/2/3)").Trim()
+function Show-Menu {
+    Write-Header
+    Write-Host "  Log file: $script:LogFile" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  Select an option:" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "    1.  Install programs" -ForegroundColor Yellow
+    Write-Host "    2.  Import FiveM settings" -ForegroundColor Yellow
+    Write-Host "    3.  Both (install then import)" -ForegroundColor Yellow
+    Write-Host "    4.  Exit" -ForegroundColor DarkGray
+    Write-Host ""
+    $Host.UI.RawUI.FlushInputBuffer()
+    $c = (Read-Host "  Choice (1/2/3/4)").Trim()
+    return $c
 }
 
-switch ($choice) {
-    "1" { Start-Install }
-    "2" { Start-ImportFiveM }
-    "3" { Start-Install; Start-ImportFiveM }
+while ($true) {
+    $choice = ""
+    while ($choice -notmatch "^[1234]$") {
+        $choice = Show-Menu
+    }
+    switch ($choice) {
+        "1" { Start-Install }
+        "2" { Start-ImportFiveM }
+        "3" { Start-Install; Start-ImportFiveM }
+        "4" {
+            Write-Host ""
+            Write-Host "  Bye!" -ForegroundColor DarkGray
+            Write-Host ""
+            exit 0
+        }
+    }
+    Write-Host ""
+    Read-Host "  Press Enter to return to menu"
 }
-
-Write-Host ""
-Read-Host "  Press Enter to exit"
