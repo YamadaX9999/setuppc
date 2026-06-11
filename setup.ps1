@@ -267,8 +267,8 @@ function Start-Install {
                         Write-Host ""
                         Write-Host "  !! REBOOT required - run this script again after reboot !!" -ForegroundColor Red
                         Write-Host ""
-                        Read-Host "  Press Enter to exit"
-                        exit 0
+                        Read-Host "  Press Enter to continue"
+                        return
                     } else {
                         Write-Fail ".NET installer exited with code $($p.ExitCode)"
                     }
@@ -557,7 +557,8 @@ function Start-ActivateWindows {
     Write-Info "A menu will appear - choose option [1] HWID for permanent activation."
     Write-Host ""
     try {
-        irm https://get.activated.win | iex
+        $cmd = "irm https://get.activated.win | iex"
+        Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command $cmd" -Wait
         Write-Log "MAS script launched"
     } catch {
         Write-Fail "Failed to run activation script: $_"
